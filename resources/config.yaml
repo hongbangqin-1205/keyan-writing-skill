@@ -1,0 +1,15 @@
+version: 1
+source_priority:
+  - exact_direct_copy
+  - semantic_migrate
+  - title_migrate
+  - paragraph_reuse
+  - material_reuse
+  - grounded_write
+  - gap
+defaults:
+  allow_web: false
+  knowledge_base: optional
+  preserve_source_facts: true
+  require_plan_before_author: true
+  require_check_after_assemble: true

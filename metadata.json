@@ -1,0 +1,16 @@
+{
+  "name": "keyan-writing-skill",
+  "display_name": "可研报告编写",
+  "version": "1.3.0",
+  "description": "依据可研模板目录树，将建设方案和补充材料按章节规范编写为可研报告。",
+  "entrypoint": "SKILL.md",
+  "runtime": {
+    "python": ">=3.10",
+    "dependencies": ["python-docx"]
+  },
+  "cli": {
+    "entrypoint": "scripts/main.py",
+    "commands": ["init", "scan", "tree", "index", "link", "anchor", "project-tree", "plan", "author", "run",
+                 "assemble", "publish", "clean", "check", "report", "search", "kb", "verify"]
+  }
+}

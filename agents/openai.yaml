@@ -1,0 +1,4 @@
+interface:
+  display_name: "可研报告编写"
+  short_description: "按内置模板把建设方案编写为可研报告"
+  default_prompt: "使用 $keyan-writing-skill，把我上传的建设方案按技能内置可研目录和章节规范生成可研报告或指定章节；除非我明确要求更换模板，否则不要要求另传模板文件。"

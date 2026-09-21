@@ -1,0 +1,23 @@
+name: keyan-writing-skill
+version: 1
+cases:
+  - id: exact-copy
+    prompt: "生成模板中与建设方案同名且归属明确的小节"
+    expect:
+      mode: exact_direct_copy
+      preserve_source: true
+  - id: near-title
+    prompt: "生成项目建设期，全文查找项目建设周期等近似标题"
+    expect:
+      source_search: full_document
+      reject_weak_scope_hit: true
+  - id: table-migration
+    prompt: "生成第11章附表并迁移对应预算表"
+    expect:
+      preserve_table_structure: true
+      preserve_rows_and_columns: true
+  - id: evidence-gap
+    prompt: "生成没有本地证据的小节"
+    expect:
+      no_invented_facts: true
+      explicit_gap: true
