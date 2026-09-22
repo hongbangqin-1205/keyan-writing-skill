@@ -1,5 +1,7 @@
 # keyan-writing-skill
 
+[![skills.sh](https://skills.sh/b/hongbangqin-1205/keyan-writing-skill)](https://skills.sh/hongbangqin-1205/keyan-writing-skill)
+
 依据技能内置的**可研模板目录骨架**把**建设方案**逐节点写成可行性研究报告的 Codex 技能。
 默认只需上传建设方案；只有更换固定模板时才需要另传模板文件。
 取材优先级固定：**对口同名直复 → 相关标题迁移 → 正文段落复用 → 用户其他材料 → 知识库/网络取证撰写 → 显式缺口**。
