@@ -95,6 +95,13 @@ def _semantic_title_compatible(target, candidate):
     return common < max(2, min(len(target), len(candidate)) // 2)
 
 
+def _semantic_title_ok(target, candidate):
+    """语义候选的标题兼容门槛：显式同义族优先放行，其余仍走前缀冲突守卫。"""
+    if synonym_related(target, candidate):
+        return True
+    return _semantic_title_compatible(target, candidate)
+
+
 def _title_variant_score(target, candidate):
     """召回主体相同、目标标题增加限定词的标题变体。
 
@@ -592,12 +599,43 @@ def _excluded_source_keys(index, node, arbitration):
     dropped = (arbitration or {}).get("demoted", {}).get(node["key"], {})
     if dropped.get("source"):
         reserved.add(dropped["source"])
+        if dropped.get("reason") == "exact_out_of_scope":
+            # 异章同名子树被范围否决后，其祖先标题（如“项目建设目标与建设内容”）仍然落在
+            # cross/variant/near 的召回面上；沿来源链一并排除，保证该子树不能换通道绕回。
+            source_node = index.by_key.get(dropped["source"])
+            reserved.update(list((source_node or {}).get("path_keys") or [])[:-1])
     excluded = set()
     for key in reserved:
         source_node = node_by_key(index.tree, key)
         if source_node:
             excluded.update(subtree_keys(source_node))
     return excluded
+
+
+def candidate_allowed(entry, *, reserved, scope_key, allow_scope_escape=False,
+                      pinned_sources=None):
+    """语义候选统一准入层：来源保留 / 素材范围 / 锚点占用三关都过才放行。
+
+    所有语义召回通道（table、similar、cross、variant、near、exact fallback）都必须走这里，
+    避免“某条通道漏了范围判断 → 已被范围否决的来源换另一条通道绕回本节”。
+
+    allow_scope_escape=True 只给素材范围节点本身（scope candidate）这类特殊通道：
+    它是写作素材入口，既不算被保留的来源，也不受 in_scope 约束。
+    当前节点自己的合法例外（同名直复降级后的候选仍受 reserved 约束，只有 scope 节点走特殊通道）
+    由各通道显式传参表达，而不是在通道里零散补 if。
+    """
+    if not entry:
+        return False
+    if allow_scope_escape:
+        return True
+    key = entry.get("key")
+    if key in (reserved or ()):
+        return False
+    if key in (pinned_sources or ()):
+        return False
+    if scope_key and not in_scope(entry, scope_key):
+        return False
+    return True
 
 
 def _semantic_candidates(index, node, keywords, *, top_k, min_candidate_chars,
@@ -620,11 +658,17 @@ def _semantic_candidates(index, node, keywords, *, top_k, min_candidate_chars,
                      "table_match": bool(table_match and entry.get("tables", 0))})
 
     seen_keys = set()
+
+    def allowed(entry, *, allow_scope_escape=False):
+        """本节点口径的统一准入判断（reserved / scope / 锚点占用）。"""
+        return candidate_allowed(entry, reserved=reserved, scope_key=scope_key,
+                                 allow_scope_escape=allow_scope_escape)
+
     target_has_table_intent = any(word in normalize_title(node["title"])
                                   for word in _TABLE_TITLE_WORDS)
     if target_has_table_intent:
         for entry in index.entries:
-            if entry.get("tables", 0) <= 0 or entry["key"] in reserved:
+            if entry.get("tables", 0) <= 0 or not allowed(entry):
                 continue
             table_score = _table_title_score(node["title"], entry["title"])
             if not table_score:
@@ -633,10 +677,9 @@ def _semantic_candidates(index, node, keywords, *, top_k, min_candidate_chars,
             seen_keys.add(entry["key"])
     for title_score, entry in index.similar_entries(node["title"], k=top_k,
                                                    min_chars=min_candidate_chars, min_score=0.34):
-        if not _semantic_title_compatible(node["title"], entry["title"]):
+        if not _semantic_title_ok(node["title"], entry["title"]):
             continue
-        if (entry["key"] in reserved or entry["key"] in seen_keys
-                or (scope_key and not in_scope(entry, scope_key))):
+        if entry["key"] in seen_keys or not allowed(entry):
             continue
         add(entry, min(1.0, title_score +
                        _title_suffix_bonus(node["title"], entry["title"])),
@@ -645,7 +688,7 @@ def _semantic_candidates(index, node, keywords, *, top_k, min_candidate_chars,
     seen_keys.update(item["entry"]["key"] for item in pool)
     for entry in index.entries:
         cross_score = _cross_title_score(node["title"], entry["title"])
-        if (not cross_score or entry["key"] in seen_keys or entry["key"] in reserved
+        if (not cross_score or entry["key"] in seen_keys or not allowed(entry)
                 or (entry["subtree_chars"] < min_candidate_chars and not entry["children_count"])):
             continue
         add(entry, min(1.0, cross_score +
@@ -653,14 +696,14 @@ def _semantic_candidates(index, node, keywords, *, top_k, min_candidate_chars,
         seen_keys.add(entry["key"])
     for entry in index.entries:
         variant_score = _title_variant_score(node["title"], entry["title"])
-        if (not variant_score or entry["key"] in seen_keys
+        if (not variant_score or entry["key"] in seen_keys or not allowed(entry)
                 or (entry["subtree_chars"] < min_candidate_chars and not entry["children_count"])):
             continue
         add(entry, variant_score, synonym=True)
 
     for entry in index.entries:
         near_score = _near_title_score(node["title"], entry["title"])
-        if (not near_score or entry["key"] in seen_keys or entry["key"] in reserved
+        if (not near_score or entry["key"] in seen_keys or not allowed(entry)
                 or entry["subtree_chars"] < REUSE_MIN_TOTAL_CHARS):
             continue
         add(entry, near_score, synonym=True)
@@ -669,8 +712,7 @@ def _semantic_candidates(index, node, keywords, *, top_k, min_candidate_chars,
     _best, scored = index.resolve_exact(node)
     for item in scored:
         entry = item["entry"]
-        if (not item["copyable"] or entry["key"] in reserved
-                or (scope_key and not in_scope(entry, scope_key))):
+        if not item["copyable"] or not allowed(entry):
             continue
         if entry["norm_title"] == node.get("norm_title"):
             add(entry, 1.0)
@@ -678,7 +720,7 @@ def _semantic_candidates(index, node, keywords, *, top_k, min_candidate_chars,
             add(entry, item["context_score"])
     if scope_key:
         scope_entry = index.by_key.get(scope_key)
-        if scope_entry and scope_entry["key"] not in reserved:
+        if scope_entry and allowed(scope_entry, allow_scope_escape=True):
             add(scope_entry, similarity(parent_title, scope_entry["title"]), scope_candidate=True)
     pool.sort(key=lambda item: (item.get("scope_material", False), -item["combined"],
                                -item["title_score"], item["entry"]["doc_order"]))
