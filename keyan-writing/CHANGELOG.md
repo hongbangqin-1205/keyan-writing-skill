@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 (2026-09-22)
+
+- Added a single admission guard (`candidate_allowed`) shared by every semantic recall channel - table, similar, cross, variant, near and exact fallback - so reserved sources, material-scope limits and manual-anchor ownership are enforced identically on every channel (P1-1).
+- Extended `exact_out_of_scope` demotion to reserve the rejected source's ancestor chain, so a subtree ruled out of scope can no longer re-enter the same target through another channel. Paragraph-level reuse inside the same source chapter stays available, and the material-scope node remains a privileged channel (P1-1).
+- Let explicit synonym pairs bypass the prefix-conflict guard through `_semantic_title_ok`, so pairs such as 安全系统设计方案 ↔ 安全设计 are no longer filtered out, while prefix false positives (项目建设单位 vs 项目建设依据) stay blocked (P1-2).
+- Added `tests/test_routing_hardening.py` (19 regression cases) and `tests/eval_routing_baseline.py` (45-case deterministic baseline reporting Recall@3, Top-1 route accuracy, wrong-migration rate and grounded-write fallback rate) as the baseline for a future LLM reranker A/B.
+- No changes to scoring weights, thresholds, scope quorum, arbitration weights or `_accept_migration`; no LLM, embedding or reranker introduced.
+
 ## 1.3.0 (2026-09-20)
 
 - Bundled a project-neutral Markdown outline so a new project only needs the construction-plan input.
